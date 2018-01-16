@@ -1,58 +1,70 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.Data;
-using System.Drawing;
-using System.Linq;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
 namespace VSOExp
 {
-  public partial class LoaderForm : Form
-  {
-    public LoaderForm()
-    {
-      InitializeComponent();
-    }
+	public partial class LoaderForm : Form
+	{
+		public LoaderForm()
+		{
+			InitializeComponent();
+		}
 
-    private async void hwLoadPrepro_Click(object sender, EventArgs e)
-    {
-      if ( hwOpenFilePrepro.ShowDialog() == DialogResult.OK )
-      {
-        hwProgress.Visible = true;
+		private async void hwLoadPrepro_Click(object sender, EventArgs e)
+		{
+			if (hwOpenFilePrepro.ShowDialog(this) == DialogResult.OK)
+			{
+				hwProgress.Visible = true;
 
-        ParsedPreprocessorOutput ppOutput = new ParsedPreprocessorOutput();
-        await Task.Run(() => ppOutput.ParseFromFile(hwOpenFilePrepro.FileName));
+				var output = await Task.Factory.StartNew(() =>
+				{
+					var ppOutput = new ParsedPreprocessorOutput();
+					bool success = ppOutput.ParseFromFile(hwOpenFilePrepro.FileName);
+					return success ? ppOutput : null;
+				});
 
-        hwProgress.Visible = false;
+				if (output == null)
+				{
+					MessageBox.Show(this, "Failed to parse: " + hwOpenFilePrepro.FileName, "Parse Failed", MessageBoxButtons.OK, MessageBoxIcon.Error);
+					return;
+				}
 
-        PreproForm ppForm = new PreproForm(ppOutput);
-        ppForm.Text = hwOpenFilePrepro.FileName;
-        ppForm.Show();
-      }
-    }
+				hwProgress.Visible = false;
 
-    private async void hwLoadLayout_Click(object sender, EventArgs e)
-    {
-      if (hwOpenFileLayout.ShowDialog() == DialogResult.OK)
-      {
-        hwProgress.Visible = true;
+				var ppForm = new PreproForm(output);
+				ppForm.Text = hwOpenFilePrepro.FileName;
+				ppForm.Show(this);
+			}
+		}
 
-        // load in the background as these files can be enormous and the parse can take a while
-        LayoutLoader layoutLoader = new LayoutLoader();
-        await Task.Run(() => layoutLoader.ParseFromFile(hwOpenFileLayout.FileName));
+		private async void hwLoadLayout_Click(object sender, EventArgs e)
+		{
+			if (hwOpenFileLayout.ShowDialog(this) == DialogResult.OK)
+			{
+				hwProgress.Visible = true;
 
-        hwProgress.Visible = false;
+				// load in the background as these files can be enormous and the parse can take a while
+				var output = await Task.Factory.StartNew(() =>
+				{
+					var layoutLoader = new LayoutLoader();
+					bool success = layoutLoader.ParseFromFile(hwOpenFileLayout.FileName);
+					return success ? layoutLoader.Result : null;
+				});
 
-        LayoutLoaderOutput llOutput = layoutLoader.Result;
+				if (output == null)
+				{
+					MessageBox.Show(this, "Failed to parse: " + hwOpenFileLayout.FileName, "Parse Failed", MessageBoxButtons.OK, MessageBoxIcon.Error);
+					return;
+				}
 
-        LayoutForm loForm = new LayoutForm(llOutput);
-        loForm.Text = hwOpenFileLayout.FileName;
-        loForm.Show();
-      }
-    }
-  }
+				hwProgress.Visible = false;
+
+				var loForm = new LayoutForm(output);
+				loForm.Text = hwOpenFileLayout.FileName;
+				loForm.Show(this);
+			}
+		}
+	}
 }

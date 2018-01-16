@@ -1,205 +1,176 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using System.IO;
 
 namespace VSOExp
 {
-  public class PreproTreeNode : Aga.Controls.Tree.Node
-  {
-    public PreproNode DataNode;
+	public sealed class PreproTreeNode
+		: Aga.Controls.Tree.Node
+	{
+		public PreproNode DataNode;
 
-    private string _line;
-    public virtual string Line
-    {
-      get { return _line; }
-      set
-      {
-        if (_line != value)
-        {
-          _line = value;
-          NotifyModel();
-        }
-      }
-    }
+		private string _line;
+		public /*virtual*/ string Line
+		{
+			get { return _line; }
+			set
+			{
+				if (_line != value)
+				{
+					_line = value;
+					NotifyModel();
+				}
+			}
+		}
 
-    private string _lineDelta;
-    public virtual string LineDelta
-    {
-      get { return _lineDelta; }
-      set
-      {
-        if (_lineDelta != value)
-        {
-          _lineDelta = value;
-          NotifyModel();
-        }
-      }
-    }
-  }
+		private string _lineDelta;
+		public /*virtual*/ string LineDelta
+		{
+			get { return _lineDelta; }
+			set
+			{
+				if (_lineDelta != value)
+				{
+					_lineDelta = value;
+					NotifyModel();
+				}
+			}
+		}
+	};
 
-  public class PreproNode
-  {
-    public string Path;
-    public Int64 LineCounter;
-    public Int64 LineDelta;
+	public sealed class PreproNode
+	{
+		public string Path = "";
+		public long LineCounter = 1;
+		public long LineDelta = 0;
 
-    public Int32 LinearIndex;
-    public Int32 Depth;
-    public PreproNode Parent;
-    public List<PreproNode> Children;
+		public int LinearIndex = -1;
+		public int Depth = 0;
+		public PreproNode Parent = null;
+		public List<PreproNode> Children = new List<PreproNode>();
 
-    public Boolean UIVisible;
-    public Boolean UIExpanded;
+		public bool UIVisible = true;
+		public bool UIExpanded = false;
 
-    public PreproNode()
-    {
-      Path = "";
-      LineCounter = 1;
-      LineDelta = 0;
+		public PreproNode Add(string path)
+		{
+			var newNode = new PreproNode();
 
-      LinearIndex = -1;
-      Depth = 0;
-      Parent = null;
-      Children = new List<PreproNode>();
+			newNode.Parent = this;
+			newNode.Path = path;
 
-      UIVisible = true;
-      UIExpanded = false;
-    }
+			for (var parentWalk = newNode.Parent; parentWalk != null; parentWalk = parentWalk.Parent)
+			{
+				newNode.Depth++;
+			}
 
-    public PreproNode Add(string path)
-    {
-      PreproNode NewNode = new PreproNode();
+			Children.Add(newNode);
 
-      NewNode.Parent = this;
-      NewNode.Path = path;
+			return newNode;
+		}
+	};
 
-      PreproNode ParentWalk = NewNode.Parent;
-      while (ParentWalk != null)
-      {
-        NewNode.Depth++;
-        ParentWalk = ParentWalk.Parent;
-      }
+	public class ParsedPreprocessorOutput
+	{
+		static readonly char[] kSpaceCharArray = new char[] { ' ' };
+		static readonly char[] kSpaceThenQuoteCharArray = new char[] { ' ', '\"' };
 
-      Children.Add(NewNode);
+		public PreproNode RootNode = new PreproNode();
+		public int NumFiles = 0;
+		public int TotalLines = 0;
 
-      return NewNode;
-    }
+		public List<PreproNode> LinearNodeList = new List<PreproNode>();
 
-  }
+		public bool ParseFromFile(string filename)
+		{
+			PreproNode lNode = RootNode;
 
-  public class ParsedPreprocessorOutput
-  {
-    public PreproNode RootNode;
-    public Int32 NumFiles;
-    public Int32 TotalLines;
+			int lastLineNumber = -1;
+			string lastLinePath = "";
 
-    public List<PreproNode> LinearNodeList;
+			var nodePathLookup = new Dictionary<string, Queue<PreproNode>>();
 
-    public ParsedPreprocessorOutput()
-    {
-    }
+			foreach (string line in File.ReadLines(filename))
+			{
+				TotalLines++;
 
-    public async Task<bool> ParseFromFile(string filename)
-    {
-      RootNode = new PreproNode();
-      NumFiles = 0;
-      TotalLines = 0;
+				string inputLine = line.Trim().Replace("\\\\", "\\").Replace("\\", "/");
+				if (inputLine.Length == 0)
+					continue;
 
-      PreproNode lNode = RootNode;
+				if (inputLine.StartsWith("#line "))
+				{
+					var lineStringBits = inputLine.Split(kSpaceCharArray, 3);
 
-      int lLastLineNumber = -1;
-      string lLastLinePath = "";
+					int lineLineNum = int.Parse(lineStringBits[1]);
 
-      LinearNodeList = new List<PreproNode>();
-      Dictionary<String, Queue<PreproNode>> NodePathLookup = new Dictionary<string, Queue<PreproNode>>();
+					string lineFilePath = lineStringBits[2].Trim(kSpaceThenQuoteCharArray).ToLowerInvariant();
 
-      foreach (string line in File.ReadLines(filename))
-      {
-        TotalLines++;
+					if (lineLineNum == 1)
+					{
+						lNode = lNode.Add(lineFilePath);
+						NumFiles++;
 
-        string InputLine = line.Trim().Replace("\\\\", "\\").Replace("\\", "/");
-        if (InputLine.Length == 0)
-          continue;
+						lNode.LinearIndex = LinearNodeList.Count;
+						LinearNodeList.Add(lNode);
 
-        if (InputLine.StartsWith("#line "))
-        {
-          var lStringBits = InputLine.Split(new char[] { ' ' }, 3);
+						lNode.LineCounter = TotalLines;
 
-          int lLineNum = Int32.Parse(lStringBits[1]);
+						if (nodePathLookup.ContainsKey(lineFilePath))
+						{
+							nodePathLookup[lineFilePath].Enqueue(lNode);
+						}
+						else
+						{
+							var lineNewQueue = new Queue<PreproNode>();
+							lineNewQueue.Enqueue(lNode);
 
-          string lFilePath = lStringBits[2].Trim(new char[] { ' ', '\"' }).ToLower();
+							nodePathLookup.Add(lineFilePath, lineNewQueue);
+						}
+					}
+					else
+					{
+						lNode = nodePathLookup[lineFilePath].Peek();
+					}
 
-          if (lLineNum == 1)
-          {
-            lNode = lNode.Add(lFilePath);
-            NumFiles++;
+					lastLinePath = lineFilePath;
+					lastLineNumber = lineLineNum;
+				}
+				else
+				{
+					lastLinePath = "";
+					lastLineNumber = -1;
+				}
+			}
 
-            lNode.LinearIndex = LinearNodeList.Count;
-            LinearNodeList.Add(lNode);
+			SumUpDeltas(RootNode);
 
-            lNode.LineCounter = TotalLines;
+			return true;
+		}
 
-            if (NodePathLookup.ContainsKey(lFilePath))
-            {
-              NodePathLookup[lFilePath].Enqueue(lNode);
-            }
-            else
-            {
-              Queue<PreproNode> lNewQ = new Queue<PreproNode>();
-              lNewQ.Enqueue(lNode);
+		internal void SumUpDeltas(PreproNode ppNode)
+		{
+			ppNode.LineDelta = (TotalLines - ppNode.LineCounter);
 
-              NodePathLookup.Add(lFilePath, lNewQ);
+			foreach (PreproNode ppSearch in LinearNodeList)
+			{
+				if (ppSearch.Depth == 1)
+					ppSearch.UIExpanded = true;
 
-              await Task.Yield();
-            }
-          }
-          else
-          {
-            lNode = NodePathLookup[lFilePath].Peek();
-          }
+				if (ppSearch.Depth <= ppNode.Depth)
+				{
+					if (ppSearch.LineCounter > ppNode.LineCounter)
+					{
+						ppNode.LineDelta = (ppSearch.LineCounter - ppNode.LineCounter);
+						break;
+					}
+				}
+			}
 
-          lLastLinePath = lFilePath;
-          lLastLineNumber = lLineNum;
-        }
-        else
-        {
-          lLastLinePath = "";
-          lLastLineNumber = -1;
-        }
-      }
-
-      SumUpDeltas(RootNode);
-
-      return true;
-    }
-
-    internal void SumUpDeltas( PreproNode ppNode )
-    {
-      ppNode.LineDelta = (TotalLines - ppNode.LineCounter);
-      
-      foreach (PreproNode ppSearch in LinearNodeList)
-      {
-        if (ppSearch.Depth == 1)
-          ppSearch.UIExpanded = true;
-
-        if ( ppSearch.Depth <= ppNode.Depth )
-        {
-          if ( ppSearch.LineCounter > ppNode.LineCounter )
-          {
-            ppNode.LineDelta = (ppSearch.LineCounter - ppNode.LineCounter);
-            break;
-          }
-        }
-      }
-
-      foreach( PreproNode ppChildNode in ppNode.Children )
-      {
-        SumUpDeltas(ppChildNode);
-      }
-    }
-
-  }
+			foreach (PreproNode ppChildNode in ppNode.Children)
+			{
+				SumUpDeltas(ppChildNode);
+			}
+		}
+	};
 }

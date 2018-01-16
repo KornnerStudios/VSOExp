@@ -1,75 +1,74 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.ComponentModel;
 using System.Data;
-using System.Drawing;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using System.Windows.Forms;
 using Aga.Controls.Tree;
 
 namespace VSOExp
 {
-  public partial class LayoutForm : Form
-  {
-    LayoutLoaderOutput LayoutOutput;
-    
-    private TreeModel _model = new TreeModel();
+	public partial class LayoutForm : Form
+	{
+		LayoutLoaderOutput LayoutOutput;
 
-    public LayoutForm(LayoutLoaderOutput llOutput)
-    {
-      LayoutOutput = llOutput;
+		private TreeModel _model = new TreeModel();
 
-      InitializeComponent();
+		public LayoutForm(LayoutLoaderOutput llOutput)
+		{
+			LayoutOutput = llOutput;
 
-      BuildModelFromOutput();
+			InitializeComponent();
 
-      hwObjectTree.Model = _model;
-      hwObjectTree.KeepNodesExpanded = true;
-    }
+			BuildModelFromOutput();
 
-    internal void BuildModelFromOutput()
-    {
-      _model.Nodes.Clear();
+			hwObjectTree.Model = _model;
+			hwObjectTree.KeepNodesExpanded = true;
+		}
 
-      var SortedDict = LayoutOutput.Classes.OrderByDescending(key => key.Value.Size);
+		internal void BuildModelFromOutput()
+		{
+			_model.Nodes.Clear();
 
-      foreach (var nameLayoutPair in SortedDict)
-      {
-        if (nameLayoutPair.Value.Members.Count > 0 && nameLayoutPair.Value.Size > 0)
-        {
-          LayoutTreeNode NewNode = new LayoutTreeNode();
-          NewNode.Text = nameLayoutPair.Key;
+			var sortedDict = LayoutOutput.Classes.OrderByDescending(key => key.Value.Size);
 
-          NewNode.Size = nameLayoutPair.Value.Size.ToString();
-          NewNode.Padding = nameLayoutPair.Value.TotalAlignmentPadding.ToString();
+			foreach (var nameLayoutPair in sortedDict)
+			{
+				if (nameLayoutPair.Value.Members.Count > 0 && nameLayoutPair.Value.Size > 0)
+				{
+					var newNode = new LayoutTreeNode()
+					{
+						Text = nameLayoutPair.Key,
 
-          _model.Root.Nodes.Add(NewNode);
-
-          foreach ( var LayoutClassMember in nameLayoutPair.Value.Members )
-          {
-            LayoutTreeNode MemberNode = new LayoutTreeNode();
-            MemberNode.Text = LayoutClassMember.Name;
-            MemberNode.Size = LayoutClassMember.Size.ToString();
-
-            string MemberType = LayoutClassMember.Type;
-            if ( MemberType != null )
-            {
-              if (LayoutOutput.Classes.ContainsKey(MemberType))
-              {
-                MemberNode.Padding = "(" + LayoutOutput.Classes[MemberType].TotalAlignmentPadding + ")";
-              }
-
-              MemberNode.TypeName = MemberType;
-            }
+						Size = nameLayoutPair.Value.Size.ToString(),
+						Padding = nameLayoutPair.Value.TotalAlignmentPadding.ToString(),
+					};
 
 
-            NewNode.Nodes.Add(MemberNode);
-          }
-        }
+					_model.Root.Nodes.Add(newNode);
 
-      }
-    }
-  }
+					foreach (var layoutClassMember in nameLayoutPair.Value.Members)
+					{
+						var memberNode = new LayoutTreeNode()
+						{
+							Text = layoutClassMember.Name,
+							Size = layoutClassMember.Size.ToString(),
+						};
+
+						string memberType = layoutClassMember.Type;
+						if (memberType != null)
+						{
+							if (LayoutOutput.Classes.ContainsKey(memberType))
+							{
+								memberNode.Padding = "(" + LayoutOutput.Classes[memberType].TotalAlignmentPadding + ")";
+							}
+
+							memberNode.TypeName = memberType;
+						}
+
+
+						newNode.Nodes.Add(memberNode);
+					}
+				}
+			}
+		}
+	}
 }
